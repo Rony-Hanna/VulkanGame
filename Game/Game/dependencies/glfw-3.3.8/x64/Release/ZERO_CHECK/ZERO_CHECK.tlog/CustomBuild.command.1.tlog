@@ -1,0 +1,10 @@
+^C:\PROJECTS\GAME\GAME\DEPENDENCIES\GLFW-3.3.8\CMAKEFILES\C31363F9396E29E2DC727E96D2EC380C\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Projects/Game/Game/dependencies/glfw-3.3.8 -BC:/Projects/Game/Game/dependencies/glfw-3.3.8 --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Projects/Game/Game/dependencies/glfw-3.3.8/GLFW.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
