@@ -4,13 +4,16 @@
 #include <stdexcept>
 
 uint32_t VulkanTexture::s_TextureInstanceCount = 0;
-std::map<std::string, uint32_t> VulkanTexture::s_TextureDatabase{};
+std::map<const uint32_t, const CustomImage> VulkanTexture::s_TextureDatabase{};
 
 uint32_t VulkanTexture::CreateTextureImage(const std::string& _fileName)
 {
-	if (s_TextureDatabase.find(_fileName) != s_TextureDatabase.end())
+	for (auto iter = s_TextureDatabase.begin(); iter != s_TextureDatabase.end(); ++iter)
 	{
-		return s_TextureDatabase[_fileName];
+		if (iter->second.imageTitle == _fileName)
+		{
+			return iter->second.imageId;
+		}
 	}
 
 	int width = 0;
@@ -64,6 +67,9 @@ uint32_t VulkanTexture::CreateTextureImage(const std::string& _fileName)
 	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create an image view\n");
 
 	uint32_t textureId = s_TextureInstanceCount;
-	s_TextureDatabase.insert(std::pair(_fileName, textureId++));
+	m_Texture.imageId = textureId;
+	m_Texture.imageTitle = _fileName;
+
+	s_TextureDatabase.insert(std::pair(textureId++, m_Texture));
 	return s_TextureInstanceCount++;
 }

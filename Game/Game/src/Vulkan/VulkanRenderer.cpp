@@ -43,6 +43,7 @@ VulkanRenderer::VulkanRenderer(Window* _window) :
 	CreateDescriptorLayout();
 	AllocateDescriptorSets();
 	CreateGraphicsPipeline();
+	CreateGraphicsPipeline2();
 
 	SetupScene();
 
@@ -68,6 +69,10 @@ VulkanRenderer::~VulkanRenderer()
 		vkDestroyDescriptorSetLayout(m_MainDevice.device, descriptorSetLayout, nullptr);
 	}
 
+	m_Skybox->Cleanup();
+	delete m_Skybox;
+	m_Skybox = nullptr;
+
 	for (auto& gameObject : m_GameObjects)
 	{
 		gameObject.Cleanup();
@@ -92,6 +97,9 @@ VulkanRenderer::~VulkanRenderer()
 	m_Framebuffers.clear();
 
 	vkDestroyRenderPass(m_MainDevice.device, m_RenderPass, nullptr);
+
+	vkDestroyPipeline(m_MainDevice.device, m_GraphicsPipeline2, nullptr);
+	vkDestroyPipelineLayout(m_MainDevice.device, m_PipelineLayout2, nullptr);
 
 	vkDestroyPipeline(m_MainDevice.device, m_GraphicsPipeline, nullptr);
 	vkDestroyPipelineLayout(m_MainDevice.device, m_PipelineLayout, nullptr);
@@ -526,6 +534,84 @@ void VulkanRenderer::CreateGraphicsPipeline()
 	vkDestroyShaderModule(m_MainDevice.device, fragmentShaderModule, nullptr);
 }
 
+void VulkanRenderer::CreateGraphicsPipeline2()
+{
+	// -- Shader Creation --
+	const auto vertexShaderCode = Utilities::ReadBinaryFile("src/Shaders/skyboxVert.spv");
+	const auto fragmentShaderCode = Utilities::ReadBinaryFile("src/Shaders/skyboxFrag.spv");
+
+	VkShaderModule vertexShaderModule = VulkanUtilities::CreateShaderModule(vertexShaderCode);
+	VkShaderModule fragmentShaderModule = VulkanUtilities::CreateShaderModule(fragmentShaderCode);
+
+	VkPipelineShaderStageCreateInfo vertexShaderCreateInfo = Vki::ShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertexShaderModule);
+	VkPipelineShaderStageCreateInfo fragmentShaderCreateInfo = Vki::ShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShaderModule);
+	VkPipelineShaderStageCreateInfo shaderStages[] = { vertexShaderCreateInfo, fragmentShaderCreateInfo };
+
+	// -- Vertex Input --
+	VkVertexInputBindingDescription bindingDescription = Vki::VertexInputBindingDescription(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX);
+
+	std::vector<VkVertexInputAttributeDescription> vertexAttributesDescriptions{};
+	vertexAttributesDescriptions.resize(1);
+	vertexAttributesDescriptions[0] = Vki::VertexInputAttributeDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position));
+	VkPipelineVertexInputStateCreateInfo vertexInputCreateInfo = Vki::VertexInputStateCreateInfo(1, bindingDescription, vertexAttributesDescriptions);
+
+	// -- Input Assembly --
+	VkPipelineInputAssemblyStateCreateInfo inputAssemblyCreateInfo = Vki::InputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE);
+
+	// -- Viewport & Scissor --
+	VkViewport viewport = Vki::ViewportInfo(m_Swapchain.GetSwapchainImageExtent());
+	VkRect2D scissor = Vki::ScissorInfo(m_Swapchain.GetSwapchainImageExtent());
+	VkPipelineViewportStateCreateInfo viewportCreateInfo = Vki::ViewportStateCreateInfo(1, viewport, 1, scissor);
+
+	// -- Rasterizer --
+	VkPipelineRasterizationStateCreateInfo rasterizerCreateInfo = Vki::RasterizationStateCreateInfo(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+
+	// -- Multisampling (anti-aliasing) --
+	VkPipelineMultisampleStateCreateInfo multisampleCreateInfo = Vki::MultisampleStateCreateInfo(VK_FALSE, VK_SAMPLE_COUNT_1_BIT);
+
+	// -- Blending --
+	VkPipelineColorBlendAttachmentState colorBlendState = Vki::ColorBlendAttachmentState(VK_TRUE, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+	colorBlendState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendState.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendState.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	VkPipelineColorBlendStateCreateInfo colorBlendCreateInfo = Vki::ColorBlendStateCreateInfo(VK_FALSE, 1, colorBlendState);
+
+	// -- Pipeline layout --
+	VkPushConstantRange vertexPushConstants = Vki::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ObjectData));
+
+	VkPipelineLayoutCreateInfo layoutCreateInfo = Vki::LayoutCreateInfo();
+	layoutCreateInfo.pushConstantRangeCount = 0;
+	layoutCreateInfo.pPushConstantRanges = nullptr;
+	layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(m_DescriptorSetLayout.size());
+	layoutCreateInfo.pSetLayouts = m_DescriptorSetLayout.data();
+
+	VkResult re = vkCreatePipelineLayout(m_MainDevice.device, &layoutCreateInfo, nullptr, &m_PipelineLayout2);
+	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create pipeline layout\n");
+
+	// -- Depth & Stencil testing --
+	VkPipelineDepthStencilStateCreateInfo depthStencilCreateInfo = Vki::DepthStencilStateCreateInfo(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE);
+
+	// -- Graphics pipeline --
+	m_PipelineBuilder.shaderStages = { vertexShaderCreateInfo, fragmentShaderCreateInfo };
+	m_PipelineBuilder.vertexInputStateCreateInfo = vertexInputCreateInfo;
+	m_PipelineBuilder.inputAssemblyStateCreateInfo = inputAssemblyCreateInfo;
+	m_PipelineBuilder.viewportStateCreateInfo = viewportCreateInfo;
+	m_PipelineBuilder.rasterizationStateCreateInfo = rasterizerCreateInfo;
+	m_PipelineBuilder.multisampleStateCreateInfo = multisampleCreateInfo;
+	m_PipelineBuilder.colorBlendStateCreateInfo = colorBlendCreateInfo;
+	m_PipelineBuilder.depthStencilStateCreateInfo = depthStencilCreateInfo;
+	m_PipelineBuilder.layout = m_PipelineLayout2;
+
+	m_GraphicsPipeline2 = m_PipelineBuilder.Build(m_RenderPass, m_MainDevice.device);
+
+	vkDestroyShaderModule(m_MainDevice.device, vertexShaderModule, nullptr);
+	vkDestroyShaderModule(m_MainDevice.device, fragmentShaderModule, nullptr);
+}
+
 void VulkanRenderer::CreateRenderPass()
 {
 	VkAttachmentDescription colorAttachment{};
@@ -772,7 +858,7 @@ void VulkanRenderer::WriteDescriptors()
 	for (uint8_t i = 0; i < texturesInfo.size(); ++i)
 	{
 		texturesInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		texturesInfo[i].imageView = m_GameObjects[i].GetTextureData().imageView;
+		texturesInfo[i].imageView = VulkanTexture::GetTextureDatabase()[i].imageView;
 		texturesInfo[i].sampler = nullptr;
 	}
 
@@ -861,6 +947,17 @@ void VulkanRenderer::RecordCommands()
 		vkBeginCommandBuffer(m_CommandBuffers[i], &bufferBeginInfo);
 		vkCmdBeginRenderPass(m_CommandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+		// -----------------------
+		vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline2);
+
+		vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout2, 0, 1, &m_GlobalDescriptorSet[0], 0, nullptr);
+		vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout2, 1, 1, &m_GlobalDescriptorSet[1], 0, nullptr);
+		vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout2, 2, 1, &m_GlobalDescriptorSet[2], 0, nullptr);
+		
+		m_Skybox->Bind(m_CommandBuffers[i]);
+		m_Skybox->Render(m_CommandBuffers[i]);
+		// -----------------------
+
 		vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
 
 		vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_GlobalDescriptorSet[0], 0, nullptr);
@@ -884,6 +981,9 @@ void VulkanRenderer::RecordCommands()
 
 void VulkanRenderer::SetupScene()
 {
+	m_Skybox = new GameObject(VulkanPrimative::Primative::Cube, "brick_0.jpg");
+	m_Skybox->SetPosition(glm::vec3(1.5f, 0.0f, 4.0f));
+
 	GameObject ground(VulkanPrimative::Primative::Quad, "volcanic_rock_0.jpg");
 	ground.SetPosition(glm::vec3(0.0f, 0.5f, 0.0f));
 	ground.SetScale(glm::vec3(10.0f, 10.0f, 1.0f));
@@ -894,14 +994,14 @@ void VulkanRenderer::SetupScene()
 	GameObject box3(VulkanPrimative::Primative::Cube, "brick_0.jpg");
 	GameObject box4(VulkanPrimative::Primative::Cube, "brick_0.jpg");
 	GameObject box5(VulkanPrimative::Primative::Cube, "brick_0.jpg");
-
+	
 	box2.SetPosition(glm::vec3(1.5f, 0.0f, 0.0f));
 	box2.SetRotation(glm::vec3(0.0f, 1.1f, 0.0f));
 	box3.SetPosition(glm::vec3(3.0f, 0.0f, 0.0f));
 	box4.SetPosition(glm::vec3(-1.5f, 0.0f, 0.0f));
 	box4.SetRotation(glm::vec3(0.0f, 1.1f, 0.0f));
 	box5.SetPosition(glm::vec3(-3.0f, 0.0f, 0.0f));
-	
+
 	m_GameObjects.emplace_back(ground);
 	m_GameObjects.emplace_back(box1);
 	m_GameObjects.emplace_back(box2);

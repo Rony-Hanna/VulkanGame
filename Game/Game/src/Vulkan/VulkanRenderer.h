@@ -24,6 +24,7 @@ private:
 	void CreateSwapchain();
 	void CreateRenderPass();
 	void CreateGraphicsPipeline();
+	void CreateGraphicsPipeline2();
 	void CreateDepthBufferImage();
 	void CreateFramebuffers();
 	void CreateCommandPool();
@@ -69,6 +70,10 @@ private:
 	VulkanSwapchain m_Swapchain;
 	VkPipelineLayout m_PipelineLayout;
 	VkPipeline m_GraphicsPipeline;
+	// ----------TEMP----------
+	VkPipeline m_GraphicsPipeline2;
+	VkPipelineLayout m_PipelineLayout2;
+	// ------------------------
 	VkDescriptorPool m_DescriptorPool;
 	std::vector<VkDescriptorSetLayout> m_DescriptorSetLayout;
 	std::vector<VkDescriptorSet> m_GlobalDescriptorSet;
@@ -81,6 +86,7 @@ private:
 	uint32_t m_CurrentFrameIndex;
 	Camera m_Camera;
 
+	GameObject* m_Skybox;
 	std::vector<GameObject> m_GameObjects;
 	std::vector<VkFramebuffer> m_Framebuffers;
 	std::vector<VkCommandBuffer> m_CommandBuffers;

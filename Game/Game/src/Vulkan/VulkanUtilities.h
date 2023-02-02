@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 #include <vector>
+#include <string>
 
 struct MainDevice;
 struct SwapchainInfo;
@@ -12,6 +13,8 @@ struct CustomImage
 	VkImageView imageView;
 	VkDeviceMemory imageMemory;
 	VkFormat imageFormat;
+	uint32_t imageId;
+	std::string imageTitle;
 };
 
 struct UniformBuffer

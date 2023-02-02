@@ -15,7 +15,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityF
 {
 	if (_messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
 	{
-		printf("Validation layer: %s", _pCallbackData->pMessage);
+		printf("Validation layer: %s\n\n", _pCallbackData->pMessage);
 	}
 
 	return VK_FALSE;
