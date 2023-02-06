@@ -1,6 +1,14 @@
 #include "SceneObject.h"
 #include "Vulkan/VulkanUtilities.h"
 
+SceneObject::SceneObject() : 
+	m_VertexBuffer{},
+	m_IndexBuffer{},
+	m_Vertices{},
+	m_Indices{},
+	m_IsEmptyGameObject(true)
+{}
+
 SceneObject::SceneObject(const VulkanPrimative::Primative _primative) :
 	m_VertexBuffer{},
 	m_IndexBuffer{},
@@ -8,16 +16,44 @@ SceneObject::SceneObject(const VulkanPrimative::Primative _primative) :
 	m_Indices{},
 	m_IsEmptyGameObject(false)
 {
+	Init(_primative);
+}
+
+void SceneObject::Init(const VulkanPrimative::Primative _primative)
+{
 	if (_primative != VulkanPrimative::Primative::Empty)
 	{
 		VulkanPrimative::MakePrimative(_primative, m_Vertices, m_Indices);
 		CreateVertexBuffer();
 		CreateIndexBuffer();
+		m_IsEmptyGameObject = false;
 	}
 	else
 	{
 		m_IsEmptyGameObject = true;
 	}
+}
+
+void SceneObject::Bind(const VkCommandBuffer& _commandBuffer) const
+{
+	if (m_IsEmptyGameObject) return;
+
+	VkDeviceSize offsets[] = { 0 };
+	vkCmdBindVertexBuffers(_commandBuffer, 0, 1, &m_VertexBuffer.buffer, offsets);
+	vkCmdBindIndexBuffer(_commandBuffer, m_IndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+}
+
+void SceneObject::Render(const VkCommandBuffer& _commandBuffer) const
+{
+	if (m_IsEmptyGameObject) return;
+
+	vkCmdDrawIndexed(_commandBuffer, static_cast<uint32_t>(m_Indices.size()), 1, 0, 0, 0);
+}
+
+void SceneObject::CleanUp()
+{
+	VulkanUtilities::DestroyBuffer(m_VertexBuffer.buffer, m_VertexBuffer.bufferMemory);
+	VulkanUtilities::DestroyBuffer(m_IndexBuffer.buffer, m_IndexBuffer.bufferMemory);
 }
 
 void SceneObject::CreateVertexBuffer()

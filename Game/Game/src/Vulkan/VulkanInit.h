@@ -29,7 +29,7 @@ namespace Vki
 	VkPushConstantRange PushConstantRange(const VkShaderStageFlags _shaderStage, const uint32_t _offset, const uint32_t _size);
 	VkGraphicsPipelineCreateInfo GraphicsPipelineCreateInfo();
 	VkImageCreateInfo ImageCreateInfo();
-	VkImageViewCreateInfo ImageViewCreateInfo(const VkImage& _image, const VkFormat _format, const VkImageAspectFlags _aspectFlags);
+	VkImageViewCreateInfo ImageViewCreateInfo(const VkImage& _image, const VkFormat _format, const VkImageViewType _imageViewType, const VkImageAspectFlags _aspectFlags, uint32_t _layerCount = 1);
 	VkRenderPassCreateInfo RenderPassCreateInfo();
 	VkFramebufferCreateInfo FramebufferCreateInfo(const VkExtent2D& _framebufferSize);
 	VkSamplerCreateInfo SamplerCreateInfo(const VkBool32 _enableAnisotropy, const float _maxAnisotropy = 1.0f);

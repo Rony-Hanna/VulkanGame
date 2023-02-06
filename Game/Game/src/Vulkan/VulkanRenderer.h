@@ -4,6 +4,7 @@
 #include "VulkanSwapchain.h"
 #include "VulkanPipelineBuilder.h"
 #include "../GameObject.h"
+#include "../Skybox.h"
 #include "../Camera.h"
 #include <string>
 
@@ -73,6 +74,9 @@ private:
 	// ----------TEMP----------
 	VkPipeline m_GraphicsPipeline2;
 	VkPipelineLayout m_PipelineLayout2;
+	VkDescriptorPool m_SkyboxDescriptorPool;
+	std::vector<VkDescriptorSetLayout> m_SkyboxDescriptorSetLayout;
+	std::vector<VkDescriptorSet> m_SkyboxDescriptorSet;
 	// ------------------------
 	VkDescriptorPool m_DescriptorPool;
 	std::vector<VkDescriptorSetLayout> m_DescriptorSetLayout;
@@ -82,11 +86,11 @@ private:
 	VkSampler m_Sampler;
 	CustomImage m_DepthImage;
 	VulkanPipelineBuilder m_PipelineBuilder;
-
 	uint32_t m_CurrentFrameIndex;
-	Camera m_Camera;
 
-	GameObject* m_Skybox;
+	Camera m_Camera;
+	Skybox m_Skybox;
+
 	std::vector<GameObject> m_GameObjects;
 	std::vector<VkFramebuffer> m_Framebuffers;
 	std::vector<VkCommandBuffer> m_CommandBuffers;

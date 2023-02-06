@@ -98,9 +98,6 @@ VkShaderModule VulkanUtilities::CreateShaderModule(const std::vector<char>& _sha
 CustomImage VulkanUtilities::CreateImage(const VkExtent2D& _dimensions, const VkFormat _format, const VkImageUsageFlags _usage, const VkMemoryPropertyFlags _memoryProperty)
 {
 	CustomImage customImage{};
-	customImage.image = VK_NULL_HANDLE;
-	customImage.imageMemory = VK_NULL_HANDLE;
-	customImage.imageView = VK_NULL_HANDLE;
 	customImage.imageFormat = _format;
 
 	VkImageCreateInfo imageCreateInfo = Vki::ImageCreateInfo();
@@ -135,6 +132,46 @@ CustomImage VulkanUtilities::CreateImage(const VkExtent2D& _dimensions, const Vk
 	vkBindImageMemory(m_MainDevice->device, customImage.image, customImage.imageMemory, 0);
 
 	return customImage;
+}
+
+CustomImage VulkanUtilities::CreateCubemapImage(const VkExtent2D& _dimensions, const VkFormat _format, const VkImageUsageFlags _usage, const VkMemoryPropertyFlags _memoryProperty)
+{
+	CustomImage layeredImage{};
+	layeredImage.imageFormat = _format;
+
+	VkImageCreateInfo imageCreateInfo = Vki::ImageCreateInfo();
+	imageCreateInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+	imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;					
+	imageCreateInfo.extent.width = _dimensions.width;				
+	imageCreateInfo.extent.height = _dimensions.height;				
+	imageCreateInfo.extent.depth = 1;								
+	imageCreateInfo.mipLevels = 1;									
+	imageCreateInfo.arrayLayers = 6;								
+	imageCreateInfo.format = _format;								
+	imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;		
+	imageCreateInfo.usage = _usage;									
+	imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;				
+	imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;				
+	imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;		
+
+	VkResult re = vkCreateImage(m_MainDevice->device, &imageCreateInfo, nullptr, &layeredImage.image);
+	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create image\n");
+
+	VkMemoryRequirements memoryRequirements{};
+	vkGetImageMemoryRequirements(m_MainDevice->device, layeredImage.image, &memoryRequirements);
+
+	VkMemoryAllocateInfo memoryAllocInfo{};
+	memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	memoryAllocInfo.allocationSize = memoryRequirements.size;
+	memoryAllocInfo.memoryTypeIndex = VulkanUtilities::FindMemoryIndex(memoryRequirements.memoryTypeBits, _memoryProperty);
+
+	re = vkAllocateMemory(m_MainDevice->device, &memoryAllocInfo, nullptr, &layeredImage.imageMemory);
+	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to allocate memory for image\n");
+
+	// Connect memory to image
+	vkBindImageMemory(m_MainDevice->device, layeredImage.image, layeredImage.imageMemory, 0);
+
+	return layeredImage;
 }
 
 void VulkanUtilities::GetSwapchainInfo(const VkPhysicalDevice& _physicalDevice, const VkSurfaceKHR& _surface, SwapchainInfo& _swapchainInfo)
@@ -252,7 +289,7 @@ void VulkanUtilities::CopyBuffer(VkBuffer& _srcBuffer, VkBuffer& _dstBuffer, con
 	vkFreeCommandBuffers(m_MainDevice->device, *m_MainDevice->queueFamilyIndices.commandPool, 1, &transferCommandBuffer);
 }
 
-void VulkanUtilities::CopyBufferToImage(VkBuffer& _srcBuffer, VkImage& _dstImage, const VkExtent2D& _imageDimensions)
+void VulkanUtilities::CopyBufferToImage(VkBuffer& _srcBuffer, VkImage& _dstImage, const VkExtent2D& _imageDimensions, uint32_t _layerCount)
 {
 	VkCommandBuffer transferCommandBuffer{};
 	BeginCommandBuffer(&transferCommandBuffer);
@@ -266,7 +303,7 @@ void VulkanUtilities::CopyBufferToImage(VkBuffer& _srcBuffer, VkImage& _dstImage
 	imageRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;				// Which aspect of image to copy
 	imageRegion.imageSubresource.mipLevel = 0;											// Mipmap level to copy
 	imageRegion.imageSubresource.baseArrayLayer = 0;									// Starting array layer (if array)
-	imageRegion.imageSubresource.layerCount = 1;										// Number of layers to copy starting at base array later
+	imageRegion.imageSubresource.layerCount = _layerCount;										// Number of layers to copy starting at base array later
 	imageRegion.imageOffset = { 0, 0, 0 };												// Offset into image (as opposed to raw data in buffer offset)
 	imageRegion.imageExtent = { _imageDimensions.width, _imageDimensions.height, 1 };	// Size of region to copy as (x, y, z) values
 	vkCmdCopyBufferToImage(transferCommandBuffer, _srcBuffer, _dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &imageRegion);
@@ -287,7 +324,7 @@ void VulkanUtilities::UnmapMemory(const VkDeviceMemory& _memoryToUnmap)
 	vkUnmapMemory(m_MainDevice->device, _memoryToUnmap);
 }
 
-void VulkanUtilities::TransitionImageLayout(const VkImage& _image, const VkImageLayout& _oldLayout, const VkImageLayout& _newLayout, const VkPipelineStageFlagBits _startStage, const VkPipelineStageFlagBits _endStage)
+void VulkanUtilities::TransitionImageLayout(const VkImage& _image, const VkImageLayout& _oldLayout, const VkImageLayout& _newLayout, const VkPipelineStageFlagBits _startStage, const VkPipelineStageFlagBits _endStage, uint32_t _layerCount)
 {
 	VkCommandBuffer transitionCommandBuffer;
 	BeginCommandBuffer(&transitionCommandBuffer);
@@ -303,7 +340,7 @@ void VulkanUtilities::TransitionImageLayout(const VkImage& _image, const VkImage
 	imageMemoryBarrier.subresourceRange.baseMipLevel = 0;							// First mip level to start alterations on
 	imageMemoryBarrier.subresourceRange.levelCount = 1;								// Number of mip levels to alter starting from baseMipLevel
 	imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;							// First layer to start alterations on
-	imageMemoryBarrier.subresourceRange.layerCount = 1;								// Number of layers to alter starting from base baseArrayLayer
+	imageMemoryBarrier.subresourceRange.layerCount = _layerCount;					// Number of layers to alter starting from base baseArrayLayer
 
 	if (_oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && _newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 	{

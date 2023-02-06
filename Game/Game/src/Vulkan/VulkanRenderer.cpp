@@ -69,16 +69,13 @@ VulkanRenderer::~VulkanRenderer()
 		vkDestroyDescriptorSetLayout(m_MainDevice.device, descriptorSetLayout, nullptr);
 	}
 
-	m_Skybox->Cleanup();
-	delete m_Skybox;
-	m_Skybox = nullptr;
+	m_Camera.CleanUp();
+	m_Skybox.CleanUp();
 
 	for (auto& gameObject : m_GameObjects)
 	{
-		gameObject.Cleanup();
+		gameObject.CleanUp();
 	}
-
-	m_Camera.CleanUp();
 
 	for (uint8_t i = 0; i < MaxFrameDraws; ++i)
 	{
@@ -564,7 +561,7 @@ void VulkanRenderer::CreateGraphicsPipeline2()
 	VkPipelineViewportStateCreateInfo viewportCreateInfo = Vki::ViewportStateCreateInfo(1, viewport, 1, scissor);
 
 	// -- Rasterizer --
-	VkPipelineRasterizationStateCreateInfo rasterizerCreateInfo = Vki::RasterizationStateCreateInfo(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+	VkPipelineRasterizationStateCreateInfo rasterizerCreateInfo = Vki::RasterizationStateCreateInfo(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 
 	// -- Multisampling (anti-aliasing) --
 	VkPipelineMultisampleStateCreateInfo multisampleCreateInfo = Vki::MultisampleStateCreateInfo(VK_FALSE, VK_SAMPLE_COUNT_1_BIT);
@@ -581,19 +578,17 @@ void VulkanRenderer::CreateGraphicsPipeline2()
 	VkPipelineColorBlendStateCreateInfo colorBlendCreateInfo = Vki::ColorBlendStateCreateInfo(VK_FALSE, 1, colorBlendState);
 
 	// -- Pipeline layout --
-	VkPushConstantRange vertexPushConstants = Vki::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ObjectData));
-
 	VkPipelineLayoutCreateInfo layoutCreateInfo = Vki::LayoutCreateInfo();
 	layoutCreateInfo.pushConstantRangeCount = 0;
 	layoutCreateInfo.pPushConstantRanges = nullptr;
-	layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(m_DescriptorSetLayout.size());
-	layoutCreateInfo.pSetLayouts = m_DescriptorSetLayout.data();
+	layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(m_SkyboxDescriptorSetLayout.size());
+	layoutCreateInfo.pSetLayouts = m_SkyboxDescriptorSetLayout.data();
 
 	VkResult re = vkCreatePipelineLayout(m_MainDevice.device, &layoutCreateInfo, nullptr, &m_PipelineLayout2);
 	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create pipeline layout\n");
 
 	// -- Depth & Stencil testing --
-	VkPipelineDepthStencilStateCreateInfo depthStencilCreateInfo = Vki::DepthStencilStateCreateInfo(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE);
+	VkPipelineDepthStencilStateCreateInfo depthStencilCreateInfo = Vki::DepthStencilStateCreateInfo(VK_FALSE, VK_FALSE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE);
 
 	// -- Graphics pipeline --
 	m_PipelineBuilder.shaderStages = { vertexShaderCreateInfo, fragmentShaderCreateInfo };
@@ -698,7 +693,7 @@ void VulkanRenderer::CreateDepthBufferImage()
 	VkFormat depthImageFormat = ChooseSupportedFormat(desiredFormats, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
 	m_DepthImage = VulkanUtilities::CreateImage(m_Swapchain.GetSwapchainImageExtent(), depthImageFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	VkImageViewCreateInfo imageViewCreateInfo = Vki::ImageViewCreateInfo(m_DepthImage.image, depthImageFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+	VkImageViewCreateInfo imageViewCreateInfo = Vki::ImageViewCreateInfo(m_DepthImage.image, depthImageFormat, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT);
 
 	VkResult re = vkCreateImageView(m_MainDevice.device, &imageViewCreateInfo, nullptr, &m_DepthImage.imageView);
 	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create an image view\n");
@@ -795,6 +790,19 @@ void VulkanRenderer::CreateDescriptorPool()
 
 	auto re = vkCreateDescriptorPool(m_MainDevice.device, &poolCreateInfo, nullptr, &m_DescriptorPool);
 	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create description pool\n");
+
+	// ----------TEMP----------
+	std::vector<VkDescriptorPoolSize> poolSizes2 =
+	{
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
+	};
+
+	VkDescriptorPoolCreateInfo poolCreateInfo2 = Vki::DescriptorPoolCreateInfo(poolSizes, 2);
+
+	re = vkCreateDescriptorPool(m_MainDevice.device, &poolCreateInfo2, nullptr, &m_SkyboxDescriptorPool);
+	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create description pool\n");
+	// ------------------------
 }
 
 void VulkanRenderer::CreateDescriptorLayout()
@@ -821,6 +829,24 @@ void VulkanRenderer::CreateDescriptorLayout()
 
 	re = vkCreateDescriptorSetLayout(m_MainDevice.device, &textureSetLayoutCreateInfo, nullptr, &m_DescriptorSetLayout[2]);
 	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create description set layout\n");
+
+	// ----------TEMP----------
+	m_SkyboxDescriptorSetLayout.resize(2);
+
+	// Configure Uniform Buffer descriptor set layout
+	VkDescriptorSetLayoutBinding uboSkyboxLayoutBinding = Vki::DescriptorSetLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1);
+	VkDescriptorSetLayoutCreateInfo uboSkyboxSetLayoutCreateInfo = Vki::DescriptorSetLayoutCreateInfo(uboSkyboxLayoutBinding, 1);
+
+	re = vkCreateDescriptorSetLayout(m_MainDevice.device, &uboSkyboxSetLayoutCreateInfo, nullptr, &m_SkyboxDescriptorSetLayout[0]);
+	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create description set layout\n");
+
+	// Configure Cubemap descriptor set layout
+	VkDescriptorSetLayoutBinding cubemapLayoutBinding = Vki::DescriptorSetLayoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+	VkDescriptorSetLayoutCreateInfo cubemapSetLayoutCreateInfo = Vki::DescriptorSetLayoutCreateInfo(cubemapLayoutBinding, 1);
+
+	re = vkCreateDescriptorSetLayout(m_MainDevice.device, &cubemapSetLayoutCreateInfo, nullptr, &m_SkyboxDescriptorSetLayout[1]);
+	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create description set layout\n");
+	// ------------------------
 }
 
 void VulkanRenderer::AllocateDescriptorSets()
@@ -838,11 +864,23 @@ void VulkanRenderer::AllocateDescriptorSets()
 	VkDescriptorSetAllocateInfo textureDescriptorSetAllocInfo = Vki::AllocateDescriptorSet(1, m_DescriptorPool, m_DescriptorSetLayout[2]);
 	re = vkAllocateDescriptorSets(m_MainDevice.device, &textureDescriptorSetAllocInfo, &m_GlobalDescriptorSet[2]);
 	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to allocate description set\n");
+
+	// ----------TEMP----------
+	m_SkyboxDescriptorSet.resize(2);
+
+	VkDescriptorSetAllocateInfo uboSkyboxDescriptorSetAllocInfo = Vki::AllocateDescriptorSet(1, m_SkyboxDescriptorPool, m_SkyboxDescriptorSetLayout[0]);
+	re = vkAllocateDescriptorSets(m_MainDevice.device, &uboSkyboxDescriptorSetAllocInfo, &m_SkyboxDescriptorSet[0]);
+	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to allocate description set\n");
+
+	VkDescriptorSetAllocateInfo cubemapDescriptorSetAllocInfo = Vki::AllocateDescriptorSet(1, m_SkyboxDescriptorPool, m_SkyboxDescriptorSetLayout[1]);
+	re = vkAllocateDescriptorSets(m_MainDevice.device, &cubemapDescriptorSetAllocInfo, &m_SkyboxDescriptorSet[1]);
+	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to allocate description set\n");
+	// ------------------------
 }
 
 void VulkanRenderer::WriteDescriptors()
 {
-	std::array<VkWriteDescriptorSet, 3> descriptorWriter{};
+	std::array<VkWriteDescriptorSet, 5> descriptorWriter{};
 
 	VkDescriptorBufferInfo descriptorBufferInfo{};
 	descriptorBufferInfo.buffer = m_Camera.GetUniformBuffer().buffer;
@@ -885,6 +923,27 @@ void VulkanRenderer::WriteDescriptors()
 	descriptorWriter[2].dstArrayElement = 0;
 	descriptorWriter[2].descriptorCount = static_cast<uint32_t>(texturesInfo.size());
 	descriptorWriter[2].pImageInfo = texturesInfo.data();
+
+	descriptorWriter[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWriter[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	descriptorWriter[3].dstSet = m_SkyboxDescriptorSet[0];
+	descriptorWriter[3].dstBinding = 0;
+	descriptorWriter[3].dstArrayElement = 0;
+	descriptorWriter[3].descriptorCount = 1;
+	descriptorWriter[3].pBufferInfo = &descriptorBufferInfo;
+	
+	VkDescriptorImageInfo cubemapSamplerInfo{};
+	cubemapSamplerInfo.sampler = m_Sampler;
+	cubemapSamplerInfo.imageView = m_Skybox.GetCubemapTexture().GetTextureData().imageView;
+	cubemapSamplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	descriptorWriter[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWriter[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	descriptorWriter[4].dstSet = m_SkyboxDescriptorSet[1];
+	descriptorWriter[4].dstBinding = 0;
+	descriptorWriter[4].dstArrayElement = 0;
+	descriptorWriter[4].descriptorCount = 1;
+	descriptorWriter[4].pImageInfo = &cubemapSamplerInfo;
 
 	vkUpdateDescriptorSets(m_MainDevice.device, static_cast<uint32_t>(descriptorWriter.size()), descriptorWriter.data(), 0, nullptr);
 }
@@ -949,13 +1008,12 @@ void VulkanRenderer::RecordCommands()
 
 		// -----------------------
 		vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline2);
-
-		vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout2, 0, 1, &m_GlobalDescriptorSet[0], 0, nullptr);
-		vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout2, 1, 1, &m_GlobalDescriptorSet[1], 0, nullptr);
-		vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout2, 2, 1, &m_GlobalDescriptorSet[2], 0, nullptr);
 		
-		m_Skybox->Bind(m_CommandBuffers[i]);
-		m_Skybox->Render(m_CommandBuffers[i]);
+		vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout2, 0, 1, &m_SkyboxDescriptorSet[0], 0, nullptr);
+		vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout2, 1, 1, &m_SkyboxDescriptorSet[1], 0, nullptr);
+
+		m_Skybox.Bind(m_CommandBuffers[i]);
+		m_Skybox.Render(m_CommandBuffers[i]);
 		// -----------------------
 
 		vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
@@ -981,8 +1039,17 @@ void VulkanRenderer::RecordCommands()
 
 void VulkanRenderer::SetupScene()
 {
-	m_Skybox = new GameObject(VulkanPrimative::Primative::Cube, "brick_0.jpg");
-	m_Skybox->SetPosition(glm::vec3(1.5f, 0.0f, 4.0f));
+	const std::vector<std::string> skyboxTextures =
+	{
+		"sb_right.jpg",
+		"sb_left.jpg",
+		"sb_top.jpg",
+		"sb_bottom.jpg",
+		"sb_front.jpg",
+		"sb_back.jpg"
+	};
+
+	m_Skybox.LoadSkyboxTextures(skyboxTextures);
 
 	GameObject ground(VulkanPrimative::Primative::Quad, "volcanic_rock_0.jpg");
 	ground.SetPosition(glm::vec3(0.0f, 0.5f, 0.0f));

@@ -93,7 +93,7 @@ void VulkanSwapchain::CreateSwapchainImageViews(const VkDevice& _logicalDevice)
 	for (const auto& image : swapchainImages)
 	{ 
 		VkImageView imageView;
-		VkImageViewCreateInfo imageViewCreateInfo = Vki::ImageViewCreateInfo(image, m_SwapchainSurfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT);
+		VkImageViewCreateInfo imageViewCreateInfo = Vki::ImageViewCreateInfo(image, m_SwapchainSurfaceFormat.format, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT);
 		
 		VkResult re = vkCreateImageView(_logicalDevice, &imageViewCreateInfo, nullptr, &imageView);
 		if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create an image view\n");

@@ -9,6 +9,15 @@ struct SwapchainInfo;
 
 struct CustomImage
 {
+	CustomImage() : 
+		image(VK_NULL_HANDLE),
+		imageView(0),
+		imageMemory(0),
+		imageFormat(VK_FORMAT_UNDEFINED),
+		imageId(0),
+		imageTitle("")
+	{}
+
 	VkImage image;
 	VkImageView imageView;
 	VkDeviceMemory imageMemory;
@@ -44,14 +53,15 @@ public:
 	static void DestroyImage(const VkImage& _image, const VkDeviceMemory& _imageMemory);
 	static void DestroyImageView(const VkImageView& _imageView);
 	static void CopyBuffer(VkBuffer& _srcBuffer, VkBuffer& _dstBuffer, const VkDeviceSize& _bufferSize);
-	static void CopyBufferToImage(VkBuffer& _srcBuffer, VkImage& _dstImage, const VkExtent2D& _imageDimensions);
+	static void CopyBufferToImage(VkBuffer& _srcBuffer, VkImage& _dstImage, const VkExtent2D& _imageDimensions, uint32_t _layerCount = 1);
 	static void MapMemory(const VkDeviceMemory& _memoryToMap, const VkDeviceSize& _sizeOfMemory, void** _ppData);
 	static void UnmapMemory(const VkDeviceMemory& _memoryToUnmap);
-	static void TransitionImageLayout(const VkImage& _image, const VkImageLayout& _oldLayout, const VkImageLayout& _newLayout, const VkPipelineStageFlagBits _startStage, const VkPipelineStageFlagBits _endStage);
+	static void TransitionImageLayout(const VkImage& _image, const VkImageLayout& _oldLayout, const VkImageLayout& _newLayout, const VkPipelineStageFlagBits _startStage, const VkPipelineStageFlagBits _endStage, uint32_t _layerCount = 1);
 	static void GetSwapchainInfo(const VkPhysicalDevice& _physicalDevice, const VkSurfaceKHR& _surface, SwapchainInfo& _swapchainInfo);
 	static uint32_t FindMemoryIndex(const uint32_t _memoryTypeBits, const VkMemoryPropertyFlags& _memoryProperties);
 	static VkShaderModule CreateShaderModule(const std::vector<char>& _shaderCode);
 	static CustomImage CreateImage(const VkExtent2D& _dimensions, const VkFormat _format, const VkImageUsageFlags _usage, const VkMemoryPropertyFlags _memoryProperty);
+	static CustomImage CreateCubemapImage(const VkExtent2D& _dimensions, const VkFormat _format, const VkImageUsageFlags _usage, const VkMemoryPropertyFlags _memoryProperty);
 
 private:
 	static void BeginCommandBuffer(VkCommandBuffer* _commandBuffer);

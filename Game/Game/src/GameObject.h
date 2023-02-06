@@ -14,9 +14,7 @@ class GameObject : public SceneObject
 public:
 	GameObject(const VulkanPrimative::Primative _primative = VulkanPrimative::Primative::Empty, const std::string& _textureName = "");
 
-	void Cleanup();
-	void Bind(const VkCommandBuffer& _commandBuffer) const;
-	void Render(const VkCommandBuffer& _commandBuffer) const;
+	void CleanUp();
 	void UpdateModelMatrix();
 	void SetPosition(const glm::vec3& _pos) { m_Position = _pos; };
 	void SetScale(const glm::vec3& _scale) { m_Scale = _scale; };

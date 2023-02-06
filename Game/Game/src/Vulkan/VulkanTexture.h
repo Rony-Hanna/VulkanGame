@@ -8,6 +8,7 @@ class VulkanTexture
 {
 public:
 	uint32_t CreateTextureImage(const std::string& _fileName);
+	void CreateCubemapTexture(const std::vector<std::string>& _fileNames);
 	CustomImage GetTextureData() const { return m_Texture; }
 	static std::map<const uint32_t, const CustomImage> GetTextureDatabase() { return s_TextureDatabase; };
 

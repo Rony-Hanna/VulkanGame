@@ -256,12 +256,12 @@ namespace Vki
         return imageCreateInfo;
     }
 
-    VkImageViewCreateInfo ImageViewCreateInfo(const VkImage& _image, const VkFormat _format, const VkImageAspectFlags _aspectFlags)
+    VkImageViewCreateInfo ImageViewCreateInfo(const VkImage& _image, const VkFormat _format, const VkImageViewType _imageViewType, const VkImageAspectFlags _aspectFlags, uint32_t _layerCount)
     {
         VkImageViewCreateInfo imageViewCreateInfo{};
         imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         imageViewCreateInfo.image = _image;											// Image to create image view for
-        imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;						// Type of image (1D, 2D, 3D, cubemap...)
+        imageViewCreateInfo.viewType = _imageViewType;						        // Type of image (1D, 2D, 3D, cubemap...)
         imageViewCreateInfo.format = _format;
         imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
         imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -273,7 +273,7 @@ namespace Vki
         imageViewCreateInfo.subresourceRange.baseMipLevel = 0;						// Start mipmap level to view from
         imageViewCreateInfo.subresourceRange.levelCount = 1;						// Number of mipmap levels to view
         imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;					// Start array level to view from
-        imageViewCreateInfo.subresourceRange.layerCount = 1;
+        imageViewCreateInfo.subresourceRange.layerCount = _layerCount;
         return imageViewCreateInfo;
     }
 

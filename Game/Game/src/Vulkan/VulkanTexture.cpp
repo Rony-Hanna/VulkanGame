@@ -2,6 +2,7 @@
 #include "VulkanInit.h"
 #include "../Utilities.h"
 #include <stdexcept>
+#include <iostream>
 
 uint32_t VulkanTexture::s_TextureInstanceCount = 0;
 std::map<const uint32_t, const CustomImage> VulkanTexture::s_TextureDatabase{};
@@ -61,7 +62,7 @@ uint32_t VulkanTexture::CreateTextureImage(const std::string& _fileName)
 	VulkanUtilities::DestroyBuffer(*imageStagingBuffer.pBuffer, *imageStagingBuffer.pBufferMemory);
 
 	// Create image view for the texture
-	VkImageViewCreateInfo imageViewCreateInfo = Vki::ImageViewCreateInfo(m_Texture.image, m_Texture.imageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+	VkImageViewCreateInfo imageViewCreateInfo = Vki::ImageViewCreateInfo(m_Texture.image, m_Texture.imageFormat, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT);
 
 	VkResult re = vkCreateImageView(*VulkanUtilities::GetDevice(), &imageViewCreateInfo, nullptr, &m_Texture.imageView);
 	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create an image view\n");
@@ -72,4 +73,68 @@ uint32_t VulkanTexture::CreateTextureImage(const std::string& _fileName)
 
 	s_TextureDatabase.insert(std::pair(textureId++, m_Texture));
 	return s_TextureInstanceCount++;
+}
+
+void VulkanTexture::CreateCubemapTexture(const std::vector<std::string>& _fileNames)
+{
+	unsigned char* textureData[6]{ nullptr };
+
+	int width = 0;
+	int height = 0;
+	int desiredChannels = 0;
+
+	for (uint8_t i = 0; i < 6; ++i)
+	{
+		width = 0;
+		height = 0;
+		desiredChannels = 0;
+
+		textureData[i] = Utilities::LoadTextureFile(_fileNames[i], &width, &height, &desiredChannels);
+	}
+
+	VkBuffer imageBuffer{};
+	VkDeviceMemory imageBufferMemory{};
+	VkDeviceSize imageBufferSize = width * height * desiredChannels * 6;
+	VkDeviceSize layerSize = imageBufferSize / 6;
+
+	BufferInfo imageStagingBuffer{};
+	imageStagingBuffer.bufferUsage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+	imageStagingBuffer.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+	imageStagingBuffer.bufferSize = imageBufferSize;
+	imageStagingBuffer.pBufferMemory = &imageBufferMemory;
+	imageStagingBuffer.pBuffer = &imageBuffer;
+	VulkanUtilities::CreateBuffer(imageStagingBuffer);
+
+	// Copy images data to staging buffer
+	unsigned char* data = nullptr;
+	VulkanUtilities::MapMemory(imageBufferMemory, imageBufferSize, (void**)&data);
+
+	for (uint8_t i = 0; i < 6; ++i)
+	{
+		memcpy(data + (layerSize * i), textureData[i], static_cast<size_t>(layerSize));
+	}
+
+	VulkanUtilities::UnmapMemory(imageBufferMemory);
+
+	for (uint8_t i = 0; i < 6; ++i)
+	{
+		Utilities::FreeImage(textureData[i]);
+	}
+
+	// Create texture image
+	VkExtent2D imageDimensions{};
+	imageDimensions.width = static_cast<uint32_t>(width);
+	imageDimensions.height = static_cast<uint32_t>(height);
+
+	m_Texture = VulkanUtilities::CreateCubemapImage(imageDimensions, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	VulkanUtilities::TransitionImageLayout(m_Texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 6);
+	VulkanUtilities::CopyBufferToImage(*imageStagingBuffer.pBuffer, m_Texture.image, { static_cast<uint32_t>(width), static_cast<uint32_t>(height) }, 6);
+	VulkanUtilities::TransitionImageLayout(m_Texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 6);
+	VulkanUtilities::DestroyBuffer(*imageStagingBuffer.pBuffer, *imageStagingBuffer.pBufferMemory);
+
+	VkImageViewCreateInfo imageViewCreateInfo = Vki::ImageViewCreateInfo(m_Texture.image, m_Texture.imageFormat, VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT, 6);
+
+	VkResult re = vkCreateImageView(*VulkanUtilities::GetDevice(), &imageViewCreateInfo, nullptr, &m_Texture.imageView);
+	if (re != VK_SUCCESS) throw std::runtime_error("VULKAN ERROR: Failed to create cubemap\n");
 }
